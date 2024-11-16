@@ -1,8 +1,8 @@
 # Find_Python_Virtual_Environment_and_Activate
 
-## This script does what its name suggests, it searches withing the current working directory any present Python Virtual Environment and when it finds it, it activates it so you can run commands or install Python modules inside that environment.
+* This script does what its name suggests, it searches withing the current working directory any present Python Virtual Environment and when it finds it, it activates it so you can run commands or install Python modules inside that environment.
 
-## There is a compiled exe you can copy and run it into the directory you need to detect and activate the Python Virtual Environment from.
+* There is a compiled 'Find_Python_Virtual_Environment_and_Activate.exe' you can copy and run it into the directory you need to detect and activate the Python Virtual Environment from.
 
 
 
