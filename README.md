@@ -22,3 +22,4 @@ This Python script has been compiled as a executable file and works on Windows o
 
 **Script Developer:** Gabriel Mihai Sandu  
 **GitHub Profile:** [https://github.com/Gabrieliam42](https://github.com/Gabrieliam42)
+
