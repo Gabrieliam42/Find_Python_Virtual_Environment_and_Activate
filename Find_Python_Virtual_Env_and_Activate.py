@@ -1,3 +1,6 @@
+# Script Developer: Gabriel Mihai Sandu
+# GitHub Profile: https://github.com/Gabrieliam42
+
 import os
 import subprocess
 import platform
