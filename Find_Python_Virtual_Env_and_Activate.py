@@ -2,29 +2,128 @@
 # GitHub Profile: https://github.com/Gabrieliam42
 
 import os
+import sys
 import subprocess
 import platform
+import ctypes
+import shutil
+import stat
+
+def is_user_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def run_as_admin():
+    try:
+        ctypes.windll.shell32.ShellExecuteW(
+            None, "runas", sys.executable, " ".join(sys.argv + ["--as-admin"]), None, 1
+        )
+        return True
+    except:
+        return False
+
+def clean_broken_distributions(venv_root):
+    site_packages = os.path.join(
+        venv_root, "Lib", "site-packages"
+    ) if platform.system() == "Windows" else os.path.join(
+        venv_root, "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages"
+    )
+
+    if os.path.isdir(site_packages):
+        for entry in os.listdir(site_packages):
+            if entry.startswith("~"):
+                path = os.path.join(site_packages, entry)
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                        print(f"Deleted broken directory: {path}")
+                    else:
+                        os.remove(path)
+                        print(f"Deleted broken file: {path}")
+                except Exception as e:
+                    print(f"Failed to delete {path}: {e}")
+
+def make_pip_writable(site_packages):
+    """Clear read-only attribute from pip-* files in site-packages."""
+    for entry in os.listdir(site_packages):
+        if entry.lower().startswith("pip-") and (entry.endswith(".dist-info") or os.path.isdir(os.path.join(site_packages, entry))):
+            pip_path = os.path.join(site_packages, entry)
+            for root, dirs, files in os.walk(pip_path):
+                for name in files:
+                    fpath = os.path.join(root, name)
+                    try:
+                        os.chmod(fpath, stat.S_IWRITE | stat.S_IREAD)
+                    except Exception as e:
+                        print(f"Could not change permissions on {fpath}: {e}")
+
+def upgrade_pip(scripts_path, site_packages):
+    """Try pip upgrade with fallbacks."""
+    make_pip_writable(site_packages)
+
+    base_cmd = f'"{os.path.join(scripts_path, "python.exe")}" -m pip install --upgrade pip'
+    force_cmd = f'"{os.path.join(scripts_path, "python.exe")}" -m pip install --upgrade --force-reinstall pip'
+    ensure_cmd = f'"{os.path.join(scripts_path, "python.exe")}" -m ensurepip --upgrade'
+
+    try:
+        print("Trying normal pip upgrade...")
+        result = subprocess.run(base_cmd, shell=True)
+        if result.returncode == 0:
+            return
+        print("Normal upgrade failed. Trying --force-reinstall...")
+        result = subprocess.run(force_cmd, shell=True)
+        if result.returncode == 0:
+            return
+        print("Force-reinstall failed. Trying ensurepip --upgrade...")
+        subprocess.run(ensure_cmd, shell=True)
+    except Exception as e:
+        print(f"All pip upgrade attempts failed: {e}")
 
 def find_and_activate_venv():
-    cwd = os.getcwd()
-    
-    for root, dirs, files in os.walk(cwd):
-        if 'Scripts' in dirs or 'bin' in dirs:
-            scripts_path = os.path.join(root, 'Scripts' if platform.system() == 'Windows' else 'bin')
-            required_files = {'activate.bat' if platform.system() == 'Windows' else 'activate'}
-            
-            if required_files.issubset(set(os.listdir(scripts_path))):
-                print(f"Virtual environment found and activated at: {root}")
-                
-                if platform.system() == 'Windows':
-                    activate_command = f'cmd /k ""{os.path.join(scripts_path, "activate.bat")}" && python.exe -m pip install --upgrade pip"'
-                else:
-                    activate_command = f'source "{os.path.join(scripts_path, "activate")}" && python3 -m pip install --upgrade pip'
-                
-                subprocess.run(activate_command, shell=True, executable='/bin/bash' if platform.system() != 'Windows' else None)
-                return
+    cwd = os.getcwd()
+    
+    for root, dirs, files in os.walk(cwd):
+        if 'Scripts' in dirs or 'bin' in dirs:
+            scripts_path = os.path.join(root, 'Scripts' if platform.system() == 'Windows' else 'bin')
+            required_files = {'activate.bat' if platform.system() == 'Windows' else 'activate'}
+            
+            if required_files.issubset(set(os.listdir(scripts_path))):
+                print(f"Virtual environment found and activated at: {root}")
 
-    print("No virtual environment found.")
+                if is_user_admin():
+                    clean_broken_distributions(root)
+
+                site_packages = os.path.join(
+                    root, "Lib", "site-packages"
+                ) if platform.system() == "Windows" else os.path.join(
+                    root, "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages"
+                )
+
+                if platform.system() == 'Windows':
+                    # run pip upgrade with fallback logic
+                    upgrade_pip(scripts_path, site_packages)
+                    # keep cmd /k open
+                    activate_command = f'cmd /k ""{os.path.join(scripts_path, "activate.bat")}"'
+                else:
+                    activate_command = f'source "{os.path.join(scripts_path, "activate")}"'
+
+                subprocess.run(
+                    activate_command,
+                    shell=True,
+                    executable='/bin/bash' if platform.system() != 'Windows' else None
+                )
+                return
+
+    print("No virtual environment found.")
 
 if __name__ == "__main__":
-    find_and_activate_venv()
+    if platform.system() == "Windows":
+        if "--as-admin" not in sys.argv:
+            if not is_user_admin():
+                print("Not running as admin. Attempting to relaunch with elevated privileges...")
+                if run_as_admin():
+                    sys.exit(0)  # parent exits
+                else:
+                    print("Failed to relaunch as admin. Continuing without admin rights...")
+    find_and_activate_venv()
