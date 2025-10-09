@@ -46,7 +46,6 @@ def clean_broken_distributions(venv_root):
                     print(f"Failed to delete {path}: {e}")
 
 def make_pip_writable(site_packages):
-    """Clear read-only attribute from pip-* files in site-packages."""
     for entry in os.listdir(site_packages):
         if entry.lower().startswith("pip-") and (entry.endswith(".dist-info") or os.path.isdir(os.path.join(site_packages, entry))):
             pip_path = os.path.join(site_packages, entry)
@@ -59,7 +58,6 @@ def make_pip_writable(site_packages):
                         print(f"Could not change permissions on {fpath}: {e}")
 
 def upgrade_pip(scripts_path, site_packages):
-    """Try pip upgrade with fallbacks."""
     make_pip_writable(site_packages)
 
     base_cmd = f'"{os.path.join(scripts_path, "python.exe")}" -m pip install --upgrade pip'
@@ -101,9 +99,7 @@ def find_and_activate_venv():
                 )
 
                 if platform.system() == 'Windows':
-                    # run pip upgrade with fallback logic
                     upgrade_pip(scripts_path, site_packages)
-                    # keep cmd /k open
                     activate_command = f'cmd /k ""{os.path.join(scripts_path, "activate.bat")}"'
                 else:
                     activate_command = f'source "{os.path.join(scripts_path, "activate")}"'
@@ -123,7 +119,7 @@ if __name__ == "__main__":
             if not is_user_admin():
                 print("Not running as admin. Attempting to relaunch with elevated privileges...")
                 if run_as_admin():
-                    sys.exit(0)  # parent exits
+                    sys.exit(0)
                 else:
                     print("Failed to relaunch as admin. Continuing without admin rights...")
     find_and_activate_venv()
