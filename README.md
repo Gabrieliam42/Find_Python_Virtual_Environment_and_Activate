@@ -9,19 +9,20 @@ This Python script has been compiled as a executable file and works on Windows o
 
 
 
-
-
-<br><br>
-
-
-
-
-
-<br><br>
-
-
-
 [Download Latest Release (v1.0.0)](https://github.com/Gabrieliam42/Find_Python_Virtual_Environment_and_Activate/releases/tag/1.0.0)
+
+
+
+<br><br>
+
+
+
+
+
+<br><br>
+
+
+
 
 **Script Developer:** Gabriel Mihai Sandu  
 **GitHub Profile:** [https://github.com/Gabrieliam42](https://github.com/Gabrieliam42)
