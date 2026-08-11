@@ -83,8 +83,9 @@ def find_and_activate_venv():
     cwd = os.getcwd()
     
     for root, dirs, files in os.walk(cwd):
-        if 'Scripts' in dirs or 'bin' in dirs:
-            scripts_path = os.path.join(root, 'Scripts' if platform.system() == 'Windows' else 'bin')
+        scripts_dir = 'Scripts' if platform.system() == 'Windows' else 'bin'
+        if scripts_dir in dirs:
+            scripts_path = os.path.join(root, scripts_dir)
             required_files = {'Activate.ps1' if platform.system() == 'Windows' else 'activate'}
             
             if required_files.issubset(set(os.listdir(scripts_path))):
