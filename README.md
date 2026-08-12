@@ -4,7 +4,7 @@
 * The script also upgrades pip to the latest version inside the Virtual Environment.
 
 
-This Python script has been compiled as a executable file and works on Windows operating systems.
+This Python scripts have been compiled as executable files and work on Windows operating systems.
 * There is a compiled 'Find_Python_Virtual_Env_and_Activate.exe' file you can copy and run it into the directory you need to detect and activate the Python Virtual Environment from.
 
 
