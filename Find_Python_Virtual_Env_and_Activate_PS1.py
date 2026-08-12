@@ -9,6 +9,83 @@ import ctypes
 import shutil
 import stat
 
+PREFERRED_WINDOWS_VENV_NAMES = (
+    ".venv312",
+    ".venv313",
+    ".venv314",
+    ".venv311",
+    ".venv310",
+)
+EXCLUDED_WINDOWS_SEARCH_DIR_NAMES = {
+    ".cache",
+    ".git",
+    ".hg",
+    ".svn",
+    ".tmp",
+    "__pycache__",
+    "backup",
+    "build",
+    "dist",
+    "node_modules",
+    "tmp",
+}
+EXCLUDED_WINDOWS_SEARCH_DIR_PREFIXES = (".tmp_", "tmp_")
+
+
+def should_skip_windows_search_directory(name):
+    normalized = name.casefold()
+    return normalized in EXCLUDED_WINDOWS_SEARCH_DIR_NAMES or normalized.startswith(
+        EXCLUDED_WINDOWS_SEARCH_DIR_PREFIXES
+    )
+
+
+def is_wsl_virtualenv_root(path):
+    return (
+        os.path.isfile(os.path.join(path, "pyvenv.cfg"))
+        and os.path.isfile(os.path.join(path, "bin", "activate"))
+        and not os.path.isdir(os.path.join(path, "Scripts"))
+    )
+
+
+def find_venv_root(cwd, scripts_dir, activation_filename):
+    is_windows = platform.system() == "Windows"
+    if is_windows:
+        for preferred_name in PREFERRED_WINDOWS_VENV_NAMES:
+            preferred_root = os.path.join(cwd, preferred_name)
+            preferred_scripts = os.path.join(preferred_root, "Scripts")
+            if os.path.isfile(os.path.join(preferred_root, "pyvenv.cfg")) and os.path.isfile(
+                os.path.join(preferred_scripts, activation_filename)
+            ):
+                return preferred_root
+
+    def ignore_walk_error(_error):
+        return None
+
+    for root, dirs, files in os.walk(
+        cwd,
+        topdown=True,
+        onerror=ignore_walk_error,
+    ):
+        if is_windows:
+            dirs[:] = sorted(
+                directory
+                for directory in dirs
+                if not should_skip_windows_search_directory(directory)
+                and not is_wsl_virtualenv_root(os.path.join(root, directory))
+            )
+            if "pyvenv.cfg" not in files:
+                continue
+
+        if scripts_dir not in dirs:
+            continue
+
+        activation_path = os.path.join(root, scripts_dir, activation_filename)
+        if os.path.isfile(activation_path):
+            return root
+
+    return None
+
+
 def is_user_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
@@ -81,40 +158,37 @@ def upgrade_pip(scripts_path, site_packages):
 
 def find_and_activate_venv():
     cwd = os.getcwd()
-    
-    for root, dirs, files in os.walk(cwd):
-        scripts_dir = 'Scripts' if platform.system() == 'Windows' else 'bin'
-        if scripts_dir in dirs:
-            scripts_path = os.path.join(root, scripts_dir)
-            required_files = {'Activate.ps1' if platform.system() == 'Windows' else 'activate'}
-            
-            if required_files.issubset(set(os.listdir(scripts_path))):
-                print(f"Virtual environment found and activated at: {root}")
+    scripts_dir = 'Scripts' if platform.system() == 'Windows' else 'bin'
+    activation_filename = 'Activate.ps1' if platform.system() == 'Windows' else 'activate'
+    root = find_venv_root(cwd, scripts_dir, activation_filename)
+    if root is None:
+        print("No virtual environment found.")
+        return
 
-                if is_user_admin():
-                    clean_broken_distributions(root)
+    scripts_path = os.path.join(root, scripts_dir)
+    print(f"Virtual environment found and activated at: {root}")
 
-                site_packages = os.path.join(
-                    root, "Lib", "site-packages"
-                ) if platform.system() == "Windows" else os.path.join(
-                    root, "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages"
-                )
+    if is_user_admin():
+        clean_broken_distributions(root)
 
-                if platform.system() == 'Windows':
-                    upgrade_pip(scripts_path, site_packages)
-                    activate_script = os.path.join(scripts_path, "Activate.ps1")
-                    activate_command = ["powershell.exe", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", activate_script]
-                else:
-                    activate_command = f'source "{os.path.join(scripts_path, "activate")}"'
+    site_packages = os.path.join(
+        root, "Lib", "site-packages"
+    ) if platform.system() == "Windows" else os.path.join(
+        root, "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages"
+    )
 
-                subprocess.run(
-                    activate_command,
-                    shell=False if platform.system() == 'Windows' else True,
-                    executable='/bin/bash' if platform.system() != 'Windows' else None
-                )
-                return
+    if platform.system() == 'Windows':
+        upgrade_pip(scripts_path, site_packages)
+        activate_script = os.path.join(scripts_path, "Activate.ps1")
+        activate_command = ["powershell.exe", "-NoExit", "-ExecutionPolicy", "Bypass", "-File", activate_script]
+    else:
+        activate_command = f'source "{os.path.join(scripts_path, "activate")}"'
 
-    print("No virtual environment found.")
+    subprocess.run(
+        activate_command,
+        shell=False if platform.system() == 'Windows' else True,
+        executable='/bin/bash' if platform.system() != 'Windows' else None
+    )
 
 if __name__ == "__main__":
     if platform.system() == "Windows":
