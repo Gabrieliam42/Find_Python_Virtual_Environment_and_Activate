@@ -7,6 +7,22 @@ import subprocess
 import sys
 
 DISTRO_NAME = "Ubuntu"
+PREFERRED_VENV_NAME = ".venv"
+EXCLUDED_SEARCH_DIR_NAMES = {
+    ".cache",
+    ".git",
+    ".hg",
+    ".svn",
+    ".tmp",
+    ".venv",
+    "__pycache__",
+    "backup",
+    "build",
+    "dist",
+    "node_modules",
+    "tmp",
+}
+EXCLUDED_SEARCH_DIR_PREFIXES = (".tmp_", "tmp_")
 
 
 def is_wsl():
@@ -26,15 +42,44 @@ def pause_and_exit(message, code=1):
     sys.exit(code)
 
 
+def should_skip_search_directory(name):
+    normalized = name.casefold()
+    return normalized in EXCLUDED_SEARCH_DIR_NAMES or normalized.startswith(
+        EXCLUDED_SEARCH_DIR_PREFIXES
+    )
+
+
 def find_activate_paths():
     cwd = os.getcwd()
+    preferred_root = os.path.join(cwd, PREFERRED_VENV_NAME)
+    preferred_activate = os.path.join(preferred_root, "bin", "activate")
+    preferred_config = os.path.join(preferred_root, "pyvenv.cfg")
+    if os.path.isfile(preferred_config) and os.path.isfile(preferred_activate):
+        return [preferred_activate]
+
     activate_paths = []
-    for root, dirs, files in os.walk(cwd):
-        dirs.sort()
-        if "bin" in dirs:
-            activate_path = os.path.join(root, "bin", "activate")
-            if os.path.isfile(activate_path):
-                activate_paths.append(activate_path)
+
+    def ignore_walk_error(_error):
+        return None
+
+    for root, dirs, files in os.walk(
+        cwd,
+        topdown=True,
+        onerror=ignore_walk_error,
+    ):
+        dirs[:] = sorted(
+            directory
+            for directory in dirs
+            if not should_skip_search_directory(directory)
+        )
+        if "pyvenv.cfg" not in files or "bin" not in dirs:
+            continue
+
+        activate_path = os.path.join(root, "bin", "activate")
+        if os.path.isfile(activate_path):
+            activate_paths.append(activate_path)
+        dirs[:] = []
+
     return sorted(activate_paths)
 
 
@@ -69,7 +114,7 @@ def drop_to_bash_with_activation(activate_path):
         'echo "Activated virtual environment from: $ACTIVATE_PATH"; '
         'exec bash -i'
     )
-    result = subprocess.run(["bash", "-lc", bash_command])
+    result = subprocess.run(["bash", "-lc", bash_command], check=False)
     if result.returncode != 0:
         pause_and_exit("Failed to activate the selected virtual environment.")
 
@@ -111,6 +156,7 @@ def convert_windows_cwd_to_wsl():
         ["wsl", "-d", DISTRO_NAME, "-e", "wslpath", "-a", "-u", windows_cwd],
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode != 0:
         error_text = result.stderr.strip() or "Unknown error while converting Windows path to WSL path."
@@ -126,10 +172,43 @@ def activate_virtualenv_from_windows():
     ensure_wsl_available()
     wsl_cwd = convert_windows_cwd_to_wsl()
 
-    bash_script = f"""
+    bash_script = rf"""
 set -e
 cd -- {shlex.quote(wsl_cwd)}
-mapfile -t activate_paths < <(find . -type f -path "*/bin/activate" | sort)
+preferred_activate="./.venv/bin/activate"
+if [ -f "$preferred_activate" ] && [ -f "./.venv/pyvenv.cfg" ]; then
+    activate_paths=("$preferred_activate")
+else
+    mapfile -d '' -t activate_paths < <(
+        find . \
+            \( -type d \( \
+                -name '.cache' -o \
+                -name '.git' -o \
+                -name '.hg' -o \
+                -name '.svn' -o \
+                -name '.tmp' -o \
+                -name '.tmp_*' -o \
+                -name '.venv' -o \
+                -name '__pycache__' -o \
+                -name 'backup' -o \
+                -name 'build' -o \
+                -name 'dist' -o \
+                -name 'node_modules' -o \
+                -name 'tmp' -o \
+                -name 'tmp_*' \
+            \) -prune \) -o \
+            \( -type f -name 'pyvenv.cfg' -print0 \) \
+            2>/dev/null |
+        while IFS= read -r -d '' pyvenv_cfg; do
+            env_root="${{pyvenv_cfg%/pyvenv.cfg}}"
+            activate_path="$env_root/bin/activate"
+            if [ -f "$activate_path" ]; then
+                printf '%s\0' "$activate_path"
+            fi
+        done |
+        sort -z
+    )
+fi
 if [ "${{#activate_paths[@]}}" -eq 0 ]; then
     echo "No virtual environment activation script found in the current directory or its subdirectories."
     echo "Press Enter to exit..."
@@ -141,7 +220,7 @@ if [ "${{#activate_paths[@]}}" -eq 1 ]; then
 else
     echo "Virtual environments found in the current directory tree:"
     for i in "${{!activate_paths[@]}}"; do
-        printf "%d. %s\\n" "$((i + 1))" "${{activate_paths[$i]}}"
+        printf "%d. %s\n" "$((i + 1))" "${{activate_paths[$i]}}"
     done
     while true; do
         read -rp "Select the number of the virtual environment you want to activate: " choice
@@ -163,7 +242,10 @@ echo "Activated virtual environment from: $selected_activate"
 exec bash -i
 """
 
-    result = subprocess.run(["wsl", "-d", DISTRO_NAME, "-e", "bash", "-lc", bash_script])
+    result = subprocess.run(
+        ["wsl", "-d", DISTRO_NAME, "-e", "bash", "-lc", bash_script],
+        check=False,
+    )
     if result.returncode != 0:
         pause_and_exit("Failed to start WSL shell and activate virtual environment.")
 
