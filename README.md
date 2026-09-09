@@ -5,6 +5,9 @@
 
 - Find_Python_Virtual_Env_and_Activate.exe does this in CMD
 - Find_Python_Virtual_Env_and_Activate_PS1.exe does this in PowerShell
+
+*****
+
 - Find_cwd_WSL_Python_Virtual_Env_and_Activate.exe finds and activates the WSL Python Virtual Environment that is present in the current directory
 
 
