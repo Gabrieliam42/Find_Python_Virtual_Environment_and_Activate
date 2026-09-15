@@ -8,7 +8,7 @@
 
 *****
 
-- Find_cwd_WSL_Python_Virtual_Env_and_Activate.exe finds and activates the WSL Python Virtual Environment that is present in the current directory
+- Find_cwd_WSL_Python_Virtual_Env_and_Activate.exe finds and activates the WSL Python Virtual Environment that is present in the current directory (/mnt)
 
 
 This Python scripts have been compiled as executable files and work on Windows operating systems.
